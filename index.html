@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nokia Snake Game</title>
+    <style>
+        /* Global reset and body styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background-color: #2e3440;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+        }
+        
+        /* Game container - Nokia phone style */
+        .game-wrapper {
+            background-color: #7a8c68;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        /* LCD display container */
+        .display-container {
+            background-color: #9fb654;
+            padding: 15px;
+            border-radius: 5px;
+            border: 3px solid #5a6647;
+        }
+        
+        /* Score display */
+        .score-display {
+            background-color: #8da548;
+            color: #1f2610;
+            padding: 5px 10px;
+            margin-bottom: 10px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 18px;
+            border: 2px solid #5a6647;
+        }
+        
+        /* Game board - Nokia LCD style */
+        #gameCanvas {
+            background-color: #9fb654;
+            display: block;
+            border: 2px solid #5a6647;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        
+        /* Game over overlay */
+        .game-over {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #8da548;
+            border: 3px solid #5a6647;
+            padding: 20px 40px;
+            text-align: center;
+            display: none;
+            z-index: 100;
+            border-radius: 5px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        .game-over h2 {
+            color: #1f2610;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        
+        .game-over p {
+            color: #2f3a1a;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .game-over button {
+            background-color: #5a6647;
+            color: #9fb654;
+            border: none;
+            padding: 10px 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background-color 0.2s;
+        }
+        
+        .game-over button:hover {
+            background-color: #4a5537;
+        }
+        
+        /* Instructions */
+        .instructions {
+            text-align: center;
+            margin-top: 15px;
+            color: #4a5537;
+            font-size: 14px;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 480px) {
+            .game-wrapper {
+                padding: 15px;
+            }
+            
+            .display-container {
+                padding: 10px;
+            }
+            
+            .score-display {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-wrapper">
+        <div class="display-container">
+            <div class="score-display">SCORE: <span id="score">0</span></div>
+            <canvas id="gameCanvas"></canvas>
+            <div class="instructions">Use arrow keys to play</div>
+        </div>
+    </div>
+    
+    <div class="game-over" id="gameOverScreen">
+        <h2>GAME OVER</h2>
+        <p>Score: <span id="finalScore">0</span></p>
+        <button onclick="resetGame()">Play Again</button>
+    </div>
+
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game configuration
+        const GRID_SIZE = 20; // 20x20 grid
+        const CELL_SIZE = 15; // Size of each cell in pixels
+        const GAME_SPEED = 100; // Milliseconds between frames
+        
+        // Set canvas size
+        canvas.width = GRID_SIZE * CELL_SIZE;
+        canvas.height = GRID_SIZE * CELL_SIZE;
+        
+        // Game state variables
+        let snake = [];
+        let direction = { x: 1, y: 0 };
+        let nextDirection = { x: 1, y: 0 };
+        let food = {};
+        let score = 0;
+        let gameRunning = false;
+        let gameLoop = null;
+        
+        // Nokia-style colors
+        const COLORS = {
+            background: '#9fb654',      // Light green LCD background
+            snake: '#1f2610',          // Dark green/black for snake
+            food: '#1f2610',           // Same dark color for food
+            grid: '#8da548'            // Slightly darker green for grid
+        };
+        
+        // Initialize game
+        function initGame() {
+            // Initialize snake in the center
+            snake = [
+                { x: Math.floor(GRID_SIZE / 2), y: Math.floor(GRID_SIZE / 2) }
+            ];
+            
+            // Reset direction
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            
+            // Reset score
+            score = 0;
+            updateScore();
+            
+            // Place initial food
+            placeFood();
+            
+            // Hide game over screen
+            document.getElementById('gameOverScreen').style.display = 'none';
+            
+            // Start game
+            gameRunning = true;
+            if (gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(gameUpdate, GAME_SPEED);
+            
+            // Draw initial frame
+            draw();
+        }
+        
+        // Place food at random location
+        function placeFood() {
+            do {
+                food = {
+                    x: Math.floor(Math.random() * GRID_SIZE),
+                    y: Math.floor(Math.random() * GRID_SIZE)
+                };
+            } while (isSnakePosition(food.x, food.y));
+        }
+        
+        // Check if position is occupied by snake
+        function isSnakePosition(x, y) {
+            return snake.some(segment => segment.x === x && segment.y === y);
+        }
+        
+        // Game update logic
+        function gameUpdate() {
+            if (!gameRunning) return;
+            
+            // Update direction
+            direction = { ...nextDirection };
+            
+            // Calculate new head position
+            const head = {
+                x: snake[0].x + direction.x,
+                y: snake[0].y + direction.y
+            };
+            
+            // Check wall collision
+            if (head.x < 0 || head.x >= GRID_SIZE || 
+                head.y < 0 || head.y >= GRID_SIZE) {
+                gameOver();
+                return;
+            }
+            
+            // Check self collision
+            if (isSnakePosition(head.x, head.y)) {
+                gameOver();
+                return;
+            }
+            
+            // Add new head
+            snake.unshift(head);
+            
+            // Check food collision
+            if (head.x === food.x && head.y === food.y) {
+                score++;
+                updateScore();
+                placeFood();
+            } else {
+                // Remove tail if no food eaten
+                snake.pop();
+            }
+            
+            // Redraw
+            draw();
+        }
+        
+        // Draw game
+        function draw() {
+            // Clear canvas with background color
+            ctx.fillStyle = COLORS.background;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw subtle grid
+            ctx.strokeStyle = COLORS.grid;
+            ctx.lineWidth = 0.5;
+            
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                // Vertical lines
+                ctx.beginPath();
+                ctx.moveTo(i * CELL_SIZE, 0);
+                ctx.lineTo(i * CELL_SIZE, canvas.height);
+                ctx.stroke();
+                
+                // Horizontal lines
+                ctx.beginPath();
+                ctx.moveTo(0, i * CELL_SIZE);
+                ctx.lineTo(canvas.width, i * CELL_SIZE);
+                ctx.stroke();
+            }
+            
+            // Draw snake
+            ctx.fillStyle = COLORS.snake;
+            snake.forEach(segment => {
+                ctx.fillRect(
+                    segment.x * CELL_SIZE + 1,
+                    segment.y * CELL_SIZE + 1,
+                    CELL_SIZE - 2,
+                    CELL_SIZE - 2
+                );
+            });
+            
+            // Draw food (as a square to match Nokia style)
+            ctx.fillStyle = COLORS.food;
+            ctx.fillRect(
+                food.x * CELL_SIZE + 2,
+                food.y * CELL_SIZE + 2,
+                CELL_SIZE - 4,
+                CELL_SIZE - 4
+            );
+        }
+        
+        // Handle keyboard input
+        document.addEventListener('keydown', (e) => {
+            if (!gameRunning) return;
+            
+            // Prevent scrolling with arrow keys
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+            }
+            
+            // Update next direction based on key press
+            // Prevent 180-degree turns
+            switch (e.key) {
+                case 'ArrowUp':
+                    if (direction.y === 0) {
+                        nextDirection = { x: 0, y: -1 };
+                    }
+                    break;
+                case 'ArrowDown':
+                    if (direction.y === 0) {
+                        nextDirection = { x: 0, y: 1 };
+                    }
+                    break;
+                case 'ArrowLeft':
+                    if (direction.x === 0) {
+                        nextDirection = { x: -1, y: 0 };
+                    }
+                    break;
+                case 'ArrowRight':
+                    if (direction.x === 0) {
+                        nextDirection = { x: 1, y: 0 };
+                    }
+                    break;
+            }
+        });
+        
+        // Update score display
+        function updateScore() {
+            document.getElementById('score').textContent = score;
+        }
+        
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            clearInterval(gameLoop);
+            
+            // Show game over screen
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameOverScreen').style.display = 'block';
+        }
+        
+        // Reset game
+        function resetGame() {
+            initGame();
+        }
+        
+        // Start game on load
+        window.onload = () => {
+            initGame();
+        };
+    </script>
+</body>
+</html>
